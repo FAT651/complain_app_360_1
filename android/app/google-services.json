@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1083708041409",
+    "project_id": "complain-app-b32bb",
+    "storage_bucket": "complain-app-b32bb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1083708041409:android:94fd64c30f0d8984384c40",
+        "android_client_info": {
+          "package_name": "inc.complain.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBkbe-RgvnYhFjIVCc11NpCMS7P1vu3k80"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
