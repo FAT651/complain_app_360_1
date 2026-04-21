@@ -2,7 +2,8 @@ name: Build Windows App
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+  workflow_dispatch: # allows manual trigger
 
 jobs:
   build-windows:
@@ -26,8 +27,12 @@ jobs:
       - name: Build Windows app
         run: flutter build windows
 
+      # ✅ FIXED PATH + ZIP
+      - name: Zip build
+        run: powershell Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath windows-build.zip
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: build/windows/runner/Release/
+          path: windows-build.zip
