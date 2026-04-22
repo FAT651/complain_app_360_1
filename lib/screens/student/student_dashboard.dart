@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../config/routes.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/responsive_scaffold.dart';
 import 'complaint_form_screen.dart';
 import 'complaint_detail_screen.dart';
 
@@ -31,18 +32,37 @@ class _StudentDashboardState extends State<StudentDashboard> {
       );
     }
 
-    return Scaffold(
+    return ResponsiveScaffold(
+      selectedIndex: _selectedIndex,
+      onPageChanged: (index) {
+        setState(() => _selectedIndex = index);
+      },
       backgroundColor: AppTheme.background,
-      body: SafeArea(
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: [
-            _buildHomeTab(context, user),
-            _buildNotificationsTab(context),
-            _buildAccountTab(context, authProvider, user),
-          ],
+      navigationItems: [
+        NavigationItem(
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home,
+          label: 'Home',
+          color: AppTheme.primary,
         ),
-      ),
+        NavigationItem(
+          icon: Icons.notifications_outlined,
+          activeIcon: Icons.notifications,
+          label: 'Notifications',
+          color: AppTheme.primary,
+        ),
+        NavigationItem(
+          icon: Icons.person_outlined,
+          activeIcon: Icons.person,
+          label: 'Account',
+          color: AppTheme.primary,
+        ),
+      ],
+      pages: [
+        _buildHomeTab(context, user),
+        _buildNotificationsTab(context),
+        _buildAccountTab(context, authProvider, user),
+      ],
       floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton.extended(
               onPressed: () {
@@ -58,34 +78,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
               backgroundColor: AppTheme.primary,
             )
           : null,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() => _selectedIndex = index);
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: AppTheme.primary,
-        unselectedItemColor: Colors.grey[400],
-        elevation: 8,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications_outlined),
-            activeIcon: Icon(Icons.notifications),
-            label: 'Notifications',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outlined),
-            activeIcon: Icon(Icons.person),
-            label: 'Account',
-          ),
-        ],
-      ),
     );
   }
 

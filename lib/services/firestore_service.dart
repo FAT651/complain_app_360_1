@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/complaint_model.dart';
@@ -6,28 +7,47 @@ import '../models/user_model.dart';
 import '../models/notification_model.dart';
 
 class FirestoreService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late FirebaseFirestore _firestore;
 
-  CollectionReference<Map<String, dynamic>> get _userCollection =>
-      _firestore.collection('users');
-  CollectionReference<Map<String, dynamic>> get _complaintCollection =>
-      _firestore.collection('complaints');
-  CollectionReference<Map<String, dynamic>> get _notificationCollection =>
-      _firestore.collection('notifications');
+  // Dummy data for Linux testing
+  static final _dummyUserSnapshot = {
+    'uid': 'linux-test-user',
+    'email': 'test@complaintapp.app',
+    'studentId': 'test001',
+    'role': 'student',
+    'displayName': 'Test User',
+    'createdAt': DateTime.now().toIso8601String(),
+  };
+
+  FirestoreService() {
+    if (!Platform.isLinux) {
+      _firestore = FirebaseFirestore.instance;
+    }
+  }
+
+  CollectionReference<Map<String, dynamic>>? get _userCollection =>
+      Platform.isLinux ? null : _firestore.collection('users');
+  CollectionReference<Map<String, dynamic>>? get _complaintCollection =>
+      Platform.isLinux ? null : _firestore.collection('complaints');
+  CollectionReference<Map<String, dynamic>>? get _notificationCollection =>
+      Platform.isLinux ? null : _firestore.collection('notifications');
 
   Future<void> createUser(UserModel user) async {
-    final doc = _userCollection.doc(user.uid);
+    if (Platform.isLinux) return; // Skip on Linux
+    final doc = _userCollection!.doc(user.uid);
     await doc.set(user.toJson(), SetOptions(merge: true));
   }
 
   Future<UserModel?> fetchUserByUid(String uid) async {
-    final snapshot = await _userCollection.doc(uid).get();
+    if (Platform.isLinux) return null; // Return null on Linux
+    final snapshot = await _userCollection!.doc(uid).get();
     if (!snapshot.exists) return null;
     return UserModel.fromJson(snapshot.id, snapshot.data()!);
   }
 
   Future<UserModel?> fetchUserByStudentId(String studentId) async {
-    final snapshot = await _userCollection
+    if (Platform.isLinux) return null; // Return null on Linux
+    final snapshot = await _userCollection!
         .where('studentId', isEqualTo: studentId)
         .limit(1)
         .get();
@@ -39,7 +59,8 @@ class FirestoreService {
   }
 
   Future<UserModel?> fetchUserByEmail(String email) async {
-    final snapshot = await _userCollection
+    if (Platform.isLinux) return null; // Return null on Linux
+    final snapshot = await _userCollection!
         .where('email', isEqualTo: email)
         .limit(1)
         .get();
@@ -51,7 +72,8 @@ class FirestoreService {
   }
 
   Future<void> createComplaint(ComplaintModel complaint) async {
-    final doc = _complaintCollection.doc(complaint.id);
+    if (Platform.isLinux) return; // Skip on Linux
+    final doc = _complaintCollection!.doc(complaint.id);
     await doc.set(complaint.toJson());
   }
 
@@ -59,12 +81,15 @@ class FirestoreService {
     String complaintId,
     ComplaintStatus status,
   ) async {
+    if (Platform.isLinux) return; // Skip on Linux
     if (kDebugMode) {
       print(
         'FirestoreService: Updating status for complaint $complaintId to ${status.name}',
       );
     }
-    await _complaintCollection.doc(complaintId).update({'status': status.name});
+    await _complaintCollection!.doc(complaintId).update({
+      'status': status.name,
+    });
     if (kDebugMode) {
       print('FirestoreService: Status updated successfully');
     }
@@ -74,10 +99,11 @@ class FirestoreService {
   }
 
   Future<void> addReply(String complaintId, ReplyModel reply) async {
+    if (Platform.isLinux) return; // Skip on Linux
     if (kDebugMode) {
       print('FirestoreService: Adding reply to complaint $complaintId');
     }
-    await _complaintCollection.doc(complaintId).update({
+    await _complaintCollection!.doc(complaintId).update({
       'replies': FieldValue.arrayUnion([reply.toJson()]),
     });
     if (kDebugMode) {
@@ -92,13 +118,14 @@ class FirestoreService {
     String complaintId,
     List<String> attachmentUrls,
   ) async {
+    if (Platform.isLinux) return; // Skip on Linux
     try {
       if (kDebugMode) {
         print(
           'FirestoreService: Adding ${attachmentUrls.length} attachments to complaint $complaintId',
         );
       }
-      await _complaintCollection.doc(complaintId).update({
+      await _complaintCollection!.doc(complaintId).update({
         'attachmentUrls': FieldValue.arrayUnion(attachmentUrls),
       });
       if (kDebugMode) {
@@ -117,13 +144,14 @@ class FirestoreService {
     String fileUrl,
     List<String> updatedUrls,
   ) async {
+    if (Platform.isLinux) return; // Skip on Linux
     try {
       if (kDebugMode) {
         print(
           'FirestoreService: Deleting attachment from complaint $complaintId',
         );
       }
-      await _complaintCollection.doc(complaintId).update({
+      await _complaintCollection!.doc(complaintId).update({
         'attachmentUrls': updatedUrls,
       });
       if (kDebugMode) {
@@ -138,10 +166,15 @@ class FirestoreService {
   }
 
   Stream<List<ComplaintModel>> studentComplaints(String studentId) {
+    if (Platform.isLinux) {
+      // Return empty stream on Linux for testing
+      return Stream.value([]);
+    }
+
     if (kDebugMode) {
       print('FirestoreService: Fetching complaints for studentId: $studentId');
     }
-    return _complaintCollection
+    return _complaintCollection!
         .where('studentId', isEqualTo: studentId)
         .snapshots()
         .handleError((error) {
@@ -165,7 +198,12 @@ class FirestoreService {
   }
 
   Stream<List<ComplaintModel>> allComplaints() {
-    return _complaintCollection
+    if (Platform.isLinux) {
+      // Return empty stream on Linux for testing
+      return Stream.value([]);
+    }
+
+    return _complaintCollection!
         .snapshots()
         .handleError((error) {
           if (kDebugMode) {
@@ -188,7 +226,11 @@ class FirestoreService {
   }
 
   Stream<ComplaintModel?> complaintStream(String complaintId) {
-    return _complaintCollection.doc(complaintId).snapshots().map((snapshot) {
+    if (Platform.isLinux) {
+      return Stream.value(null);
+    }
+
+    return _complaintCollection!.doc(complaintId).snapshots().map((snapshot) {
       if (!snapshot.exists) return null;
       return ComplaintModel.fromDocument(snapshot);
     });
@@ -198,9 +240,10 @@ class FirestoreService {
     String complaintId,
     ComplaintStatus status,
   ) async {
+    if (Platform.isLinux) return; // Skip on Linux
     try {
       // Get complaint to find student ID
-      final complaintDoc = await _complaintCollection.doc(complaintId).get();
+      final complaintDoc = await _complaintCollection!.doc(complaintId).get();
       if (!complaintDoc.exists) return;
 
       final complaintData = complaintDoc.data()!;
@@ -209,7 +252,7 @@ class FirestoreService {
       if (studentId == null) return;
 
       // Get user ID from student ID
-      final userDoc = await _userCollection
+      final userDoc = await _userCollection!
           .where('studentId', isEqualTo: studentId)
           .limit(1)
           .get();
@@ -229,7 +272,7 @@ class FirestoreService {
         createdAt: DateTime.now(),
       );
 
-      await _notificationCollection.add(notification.toJson());
+      await _notificationCollection!.add(notification.toJson());
       if (kDebugMode) {
         print('FirestoreService: Status change notification created');
       }
@@ -246,9 +289,10 @@ class FirestoreService {
     String complaintId,
     ReplyModel reply,
   ) async {
+    if (Platform.isLinux) return; // Skip on Linux
     try {
       // Get complaint to find student ID
-      final complaintDoc = await _complaintCollection.doc(complaintId).get();
+      final complaintDoc = await _complaintCollection!.doc(complaintId).get();
       if (!complaintDoc.exists) return;
 
       final complaintData = complaintDoc.data()!;
@@ -257,7 +301,7 @@ class FirestoreService {
       if (studentId == null) return;
 
       // Get user ID from student ID
-      final userDoc = await _userCollection
+      final userDoc = await _userCollection!
           .where('studentId', isEqualTo: studentId)
           .limit(1)
           .get();
@@ -276,7 +320,7 @@ class FirestoreService {
         createdAt: DateTime.now(),
       );
 
-      await _notificationCollection.add(notification.toJson());
+      await _notificationCollection!.add(notification.toJson());
       if (kDebugMode) {
         print('FirestoreService: Reply notification created');
       }
@@ -288,10 +332,14 @@ class FirestoreService {
   }
 
   Stream<List<NotificationModel>> userNotifications(String userId) {
+    if (Platform.isLinux) {
+      return Stream.value([]);
+    }
+
     if (kDebugMode) {
       print('FirestoreService: Fetching notifications for user: $userId');
     }
-    return _notificationCollection
+    return _notificationCollection!
         .where('userId', isEqualTo: userId)
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -314,16 +362,23 @@ class FirestoreService {
   }
 
   Future<void> markNotificationAsRead(String notificationId) async {
-    await _notificationCollection.doc(notificationId).update({'isRead': true});
+    if (Platform.isLinux) return; // Skip on Linux
+    await _notificationCollection!.doc(notificationId).update({'isRead': true});
   }
 
   Future<void> deleteNotification(String notificationId) async {
-    await _notificationCollection.doc(notificationId).delete();
+    if (Platform.isLinux) return; // Skip on Linux
+    await _notificationCollection!.doc(notificationId).delete();
   }
 
   // User Management CRUD Operations
+
   Stream<List<UserModel>> fetchAllUsers() {
-    return _userCollection
+    if (Platform.isLinux) {
+      return Stream.value([]);
+    }
+
+    return _userCollection!
         .snapshots()
         .handleError((error) {
           if (kDebugMode) {
@@ -341,7 +396,11 @@ class FirestoreService {
   }
 
   Stream<List<UserModel>> fetchUsersByRole(String role) {
-    return _userCollection
+    if (Platform.isLinux) {
+      return Stream.value([]);
+    }
+
+    return _userCollection!
         .where('role', isEqualTo: role.toLowerCase())
         .snapshots()
         .handleError((error) {
@@ -359,11 +418,12 @@ class FirestoreService {
   }
 
   Future<void> updateUser(String uid, UserModel user) async {
+    if (Platform.isLinux) return; // Skip on Linux
     try {
       if (kDebugMode) {
         print('FirestoreService: Updating user $uid');
       }
-      await _userCollection.doc(uid).update(user.toJson());
+      await _userCollection!.doc(uid).update(user.toJson());
       if (kDebugMode) {
         print('FirestoreService: User updated successfully');
       }
@@ -376,11 +436,12 @@ class FirestoreService {
   }
 
   Future<void> updateUserRole(String uid, String newRole) async {
+    if (Platform.isLinux) return; // Skip on Linux
     try {
       if (kDebugMode) {
         print('FirestoreService: Updating role for user $uid to $newRole');
       }
-      await _userCollection.doc(uid).update({'role': newRole.toLowerCase()});
+      await _userCollection!.doc(uid).update({'role': newRole.toLowerCase()});
       if (kDebugMode) {
         print('FirestoreService: User role updated successfully');
       }
@@ -393,11 +454,12 @@ class FirestoreService {
   }
 
   Future<void> deleteUser(String uid) async {
+    if (Platform.isLinux) return; // Skip on Linux
     try {
       if (kDebugMode) {
         print('FirestoreService: Deleting user $uid');
       }
-      await _userCollection.doc(uid).delete();
+      await _userCollection!.doc(uid).delete();
       if (kDebugMode) {
         print('FirestoreService: User deleted successfully');
       }

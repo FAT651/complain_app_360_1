@@ -1,12 +1,23 @@
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import 'firestore_service.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  late FirebaseAuth _auth;
   final FirestoreService _firestoreService = FirestoreService();
 
+  AuthService() {
+    // Firebase is not supported on Linux, so don't initialize it there
+    if (!Platform.isLinux) {
+      _auth = FirebaseAuth.instance;
+    }
+  }
+
   Future<UserModel?> restoreSignedInUser() async {
+    if (Platform.isLinux) {
+      return null; // No restoration on Linux (for testing)
+    }
     final firebaseUser = _auth.currentUser;
     if (firebaseUser == null) return null;
     return _firestoreService.fetchUserByUid(firebaseUser.uid);
@@ -24,6 +35,19 @@ class AuthService {
   }
 
   Future<UserModel> signIn(String emailOrId, String password) async {
+    if (Platform.isLinux) {
+      // Return a test user for Linux development
+      return UserModel(
+        uid: 'linux-test-user',
+        email: 'test@complaintapp.app',
+        studentId: emailOrId.trim(),
+        role: emailOrId.trim().toLowerCase().contains('admin')
+            ? 'admin'
+            : 'student',
+        displayName: 'Test User',
+      );
+    }
+
     final normalized = emailOrId.trim();
     String email;
     UserModel? user;
@@ -67,6 +91,12 @@ class AuthService {
   }
 
   Future<UserModel> register(String emailOrId, String password) async {
+    if (Platform.isLinux) {
+      throw UnsupportedError(
+        'User registration is not supported on Linux. This is a desktop testing build.',
+      );
+    }
+
     final normalized = emailOrId.trim();
     final email = await _normalizeEmail(normalized);
     final studentId = normalized.contains('@')
@@ -104,6 +134,12 @@ class AuthService {
     required String role,
     String? displayName,
   }) async {
+    if (Platform.isLinux) {
+      throw UnsupportedError(
+        'User account creation is not supported on Linux. This is a desktop testing build.',
+      );
+    }
+
     final result = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
@@ -129,6 +165,8 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
+    if (!Platform.isLinux) {
+      await _auth.signOut();
+    }
   }
 }
