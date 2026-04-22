@@ -186,6 +186,7 @@ class _LoginFormWidgetState extends State<LoginFormWidget> {
                 enabled: !authProvider.isLoading,
                 onPressed: () async {
                   authProvider.clearError();
+                  authProvider.clearSuccess();
 
                   final emailOrId = _idController.text.trim();
                   final password = _passwordController.text.trim();
@@ -204,12 +205,33 @@ class _LoginFormWidgetState extends State<LoginFormWidget> {
                     password,
                   );
                   if (!mounted) return;
+
                   if (success) {
+                    // Show success message
+                    if (authProvider.successMessage != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(authProvider.successMessage!),
+                          backgroundColor: Colors.green.shade600,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
                     widget.onSignInSuccess?.call();
                     final destination = authProvider.role == 'admin'
                         ? Routes.adminDashboard
                         : Routes.studentDashboard;
                     navigator.pushReplacementNamed(destination);
+                  } else if (authProvider.errorMessage != null) {
+                    // Error message is already shown in the form
+                    // but we can also show a quick toast
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(authProvider.errorMessage!),
+                        backgroundColor: Colors.red.shade600,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
                   }
                 },
               ),

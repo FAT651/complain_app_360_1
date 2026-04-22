@@ -180,6 +180,7 @@ class _RegisterFormWidgetState extends State<RegisterFormWidget> {
                 enabled: !authProvider.isLoading,
                 onPressed: () async {
                   authProvider.clearError();
+                  authProvider.clearSuccess();
 
                   final emailOrId = _idController.text.trim();
                   final password = _passwordController.text.trim();
@@ -212,9 +213,33 @@ class _RegisterFormWidgetState extends State<RegisterFormWidget> {
                     password,
                   );
                   if (!mounted) return;
+
                   if (success) {
+                    // Show success message
+                    if (authProvider.successMessage != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(authProvider.successMessage!),
+                          backgroundColor: Colors.green.shade600,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
                     widget.onRegisterSuccess?.call();
-                    navigator.pop();
+                    // Wait a moment to show success message before going back
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    if (mounted) {
+                      navigator.pop();
+                    }
+                  } else if (authProvider.errorMessage != null) {
+                    // Show error message as toast
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(authProvider.errorMessage!),
+                        backgroundColor: Colors.red.shade600,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
                   }
                 },
               ),

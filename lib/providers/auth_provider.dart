@@ -1,3 +1,4 @@
+import 'dart:io' show SocketException;
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
@@ -9,6 +10,7 @@ class AuthProvider extends ChangeNotifier {
   bool _keepSignedIn = false;
   UserModel? _currentUser;
   String? _errorMessage;
+  String? _successMessage;
 
   bool get isLoading => _isLoading;
   bool get keepSignedIn => _keepSignedIn;
@@ -17,6 +19,7 @@ class AuthProvider extends ChangeNotifier {
   String? get studentId => _currentUser?.studentId;
   bool get isAuthenticated => _currentUser != null;
   String? get errorMessage => _errorMessage;
+  String? get successMessage => _successMessage;
 
   void toggleKeepSignedIn(bool value) {
     _keepSignedIn = value;
@@ -28,9 +31,15 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearSuccess() {
+    _successMessage = null;
+    notifyListeners();
+  }
+
   Future<void> initialize() async {
     _isLoading = true;
     _errorMessage = null;
+    _successMessage = null;
     notifyListeners();
     try {
       _currentUser = await _authService.restoreSignedInUser();
@@ -44,9 +53,13 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signIn(String emailOrId, String password) async {
     _isLoading = true;
     _errorMessage = null;
+    _successMessage = null;
     notifyListeners();
     try {
       _currentUser = await _authService.signIn(emailOrId, password);
+      if (_currentUser != null) {
+        _successMessage = 'Welcome back, ${_currentUser!.displayName}!';
+      }
       return _currentUser != null;
     } catch (e) {
       _errorMessage = _getUserFriendlyErrorMessage(e);
@@ -60,9 +73,13 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> register(String emailOrId, String password) async {
     _isLoading = true;
     _errorMessage = null;
+    _successMessage = null;
     notifyListeners();
     try {
       _currentUser = await _authService.register(emailOrId, password);
+      if (_currentUser != null) {
+        _successMessage = 'Account created successfully! Welcome aboard';
+      }
       return _currentUser != null;
     } catch (e) {
       _errorMessage = _getUserFriendlyErrorMessage(e);
@@ -76,6 +93,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> signOut() async {
     _isLoading = true;
     _errorMessage = null;
+    _successMessage = null;
     notifyListeners();
     try {
       await _authService.signOut();
@@ -89,6 +107,11 @@ class AuthProvider extends ChangeNotifier {
 
   String _getUserFriendlyErrorMessage(dynamic error) {
     if (error is String) return error;
+
+    // Check for network-related exceptions first
+    if (_isNetworkError(error)) {
+      return 'Network connection error. Please check your internet connection and try again.';
+    }
 
     // Handle Firebase Auth exceptions
     final errorString = error.toString().toLowerCase();
@@ -115,11 +138,6 @@ class AuthProvider extends ChangeNotifier {
       return 'Invalid email format.';
     }
 
-    if (errorString.contains('network-request-failed') ||
-        errorString.contains('unavailable')) {
-      return 'Network error. Please check your internet connection.';
-    }
-
     if (errorString.contains('too-many-requests')) {
       return 'Too many failed attempts. Please try again later.';
     }
@@ -130,5 +148,21 @@ class AuthProvider extends ChangeNotifier {
 
     // Default fallback
     return 'Authentication failed. Please try again.';
+  }
+
+  bool _isNetworkError(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+
+    // Check for various network error indicators
+    return errorString.contains('network') ||
+        errorString.contains('socket') ||
+        errorString.contains('connection') ||
+        errorString.contains('timeout') ||
+        errorString.contains('unavailable') ||
+        errorString.contains('unrechable') ||
+        errorString.contains('unreachable') ||
+        errorString.contains('unable to reach') ||
+        errorString.contains('failed to connect') ||
+        error is SocketException;
   }
 }
