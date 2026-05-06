@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../config/routes.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/primary_button.dart';
 import '../../providers/auth_provider.dart';
@@ -242,6 +243,21 @@ class _RegisterFormWidgetState extends State<RegisterFormWidget> {
                     );
                   }
                 },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Already have an account? ',
+                    style: TextStyle(color: Color(0xFF667085)),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.pushReplacementNamed(context, Routes.login),
+                    child: const Text('Login'),
+                  ),
+                ],
               ),
             ],
           ),

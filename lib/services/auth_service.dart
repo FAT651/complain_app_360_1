@@ -164,6 +164,71 @@ class AuthService {
     return userModel;
   }
 
+  Future<UserModel> updateUserAccount({
+    String? displayName,
+    String? newPassword,
+  }) async {
+    if (Platform.isLinux) {
+      throw UnsupportedError(
+        'Account updates are not supported on Linux. This is a desktop testing build.',
+      );
+    }
+
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'No authenticated user found.',
+      );
+    }
+
+    // Update password if provided
+    if (newPassword != null && newPassword.isNotEmpty) {
+      try {
+        await currentUser.updatePassword(newPassword);
+      } catch (e) {
+        if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+          throw FirebaseAuthException(
+            code: 'requires-recent-login',
+            message:
+                'For security reasons, please sign out and sign back in before changing your password.',
+          );
+        }
+        rethrow;
+      }
+    }
+
+    // Fetch current profile
+    final profile = await _firestoreService.fetchUserByUid(currentUser.uid);
+    if (profile == null) {
+      throw FirebaseAuthException(
+        code: 'missing-profile',
+        message: 'User profile not found',
+      );
+    }
+
+    // Create updated profile
+    final updatedProfile = UserModel(
+      uid: profile.uid,
+      email: profile.email,
+      studentId: profile.studentId,
+      role: profile.role,
+      displayName: displayName?.isNotEmpty == true
+          ? displayName!
+          : profile.displayName,
+    );
+
+    // Update Firestore if display name changed or password was updated
+    if ((displayName != null &&
+            displayName.isNotEmpty &&
+            displayName != profile.displayName) ||
+        (newPassword != null && newPassword.isNotEmpty)) {
+      await _firestoreService.updateUser(currentUser.uid, updatedProfile);
+    }
+
+    return updatedProfile;
+  }
+
   Future<void> signOut() async {
     if (!Platform.isLinux) {
       await _auth.signOut();

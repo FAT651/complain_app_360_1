@@ -1,5 +1,7 @@
-import 'dart:io' show SocketException;
+import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
@@ -36,6 +38,18 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> _checkNetworkConnectivity() async {
+    try {
+      // Try to reach a reliable host to check connectivity
+      final response = await http
+          .get(Uri.parse('https://www.google.com'))
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<void> initialize() async {
     _isLoading = true;
     _errorMessage = null;
@@ -55,12 +69,29 @@ class AuthProvider extends ChangeNotifier {
     _errorMessage = null;
     _successMessage = null;
     notifyListeners();
+
     try {
-      _currentUser = await _authService.signIn(emailOrId, password);
+      // Check network connectivity first
+      final hasNetwork = await _checkNetworkConnectivity();
+      if (!hasNetwork) {
+        _errorMessage =
+            'No internet connection. Please check your network and try again.';
+        return false;
+      }
+
+      // Add timeout to the sign in operation
+      _currentUser = await _authService
+          .signIn(emailOrId, password)
+          .timeout(const Duration(seconds: 30));
+
       if (_currentUser != null) {
         _successMessage = 'Welcome back, ${_currentUser!.displayName}!';
       }
       return _currentUser != null;
+    } on TimeoutException {
+      _errorMessage =
+          'Connection timeout. Please check your internet connection and try again.';
+      return false;
     } catch (e) {
       _errorMessage = _getUserFriendlyErrorMessage(e);
       return false;
@@ -75,12 +106,81 @@ class AuthProvider extends ChangeNotifier {
     _errorMessage = null;
     _successMessage = null;
     notifyListeners();
+
     try {
-      _currentUser = await _authService.register(emailOrId, password);
+      // Check network connectivity first
+      final hasNetwork = await _checkNetworkConnectivity();
+      if (!hasNetwork) {
+        _errorMessage =
+            'No internet connection. Please check your network and try again.';
+        return false;
+      }
+
+      // Add timeout to the register operation
+      _currentUser = await _authService
+          .register(emailOrId, password)
+          .timeout(const Duration(seconds: 30));
+
       if (_currentUser != null) {
         _successMessage = 'Account created successfully! Welcome aboard';
       }
       return _currentUser != null;
+    } on TimeoutException {
+      _errorMessage =
+          'Connection timeout. Please check your internet connection and try again.';
+      return false;
+    } catch (e) {
+      _errorMessage = _getUserFriendlyErrorMessage(e);
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateAccount({
+    required String displayName,
+    String? newPassword,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _successMessage = null;
+    notifyListeners();
+    try {
+      if (Platform.isLinux) {
+        if (_currentUser == null) {
+          throw Exception('No authenticated user.');
+        }
+        _currentUser = UserModel(
+          uid: _currentUser!.uid,
+          email: _currentUser!.email,
+          studentId: _currentUser!.studentId,
+          role: _currentUser!.role,
+          displayName: displayName,
+        );
+      } else {
+        // Check network connectivity first
+        final hasNetwork = await _checkNetworkConnectivity();
+        if (!hasNetwork) {
+          _errorMessage =
+              'No internet connection. Please check your network and try again.';
+          return false;
+        }
+
+        // Add timeout to the update operation
+        _currentUser = await _authService
+            .updateUserAccount(
+              displayName: displayName,
+              newPassword: newPassword,
+            )
+            .timeout(const Duration(seconds: 30));
+      }
+      _successMessage = 'Account updated successfully.';
+      return true;
+    } on TimeoutException {
+      _errorMessage =
+          'Connection timeout. Please check your internet connection and try again.';
+      return false;
     } catch (e) {
       _errorMessage = _getUserFriendlyErrorMessage(e);
       return false;

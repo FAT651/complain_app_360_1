@@ -24,6 +24,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String? _selectedCategory;
 
   @override
+  void dispose() {
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
@@ -529,6 +534,35 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ),
         const SizedBox(height: 24),
 
+        // Account menu
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              _buildMenuItem(
+                context,
+                icon: Icons.edit,
+                title: 'Edit Account',
+                subtitle: 'Update your name and password',
+                onTap: () {
+                  Navigator.pushNamed(context, Routes.accountEdit);
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
         // User Management button
         SizedBox(
           width: double.infinity,
@@ -580,6 +614,55 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMenuItem(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: AppTheme.primary, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400], size: 24),
+          ],
+        ),
+      ),
     );
   }
 

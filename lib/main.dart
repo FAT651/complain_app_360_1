@@ -10,6 +10,7 @@ import 'config/supabase_config.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'screens/account_edit_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/student/student_dashboard.dart';
 import 'screens/splash_screen.dart';
@@ -48,6 +49,7 @@ class MainApp extends StatelessWidget {
           Routes.splash: (_) => const SplashScreen(),
           Routes.login: (_) => const LoginScreen(),
           Routes.register: (_) => const RegisterScreen(),
+          Routes.accountEdit: (_) => const AccountEditScreen(),
           Routes.studentDashboard: (_) => const StudentDashboard(),
           Routes.adminDashboard: (_) => const AdminDashboard(),
         },
