@@ -113,8 +113,11 @@ class AuthProvider extends ChangeNotifier {
       if (!hasNetwork) {
         _errorMessage =
             'No internet connection. Please check your network and try again.';
+        print('⚠️ Registration failed: No network connection');
         return false;
       }
+
+      print('🚀 Starting registration for: $emailOrId');
 
       // Add timeout to the register operation
       _currentUser = await _authService
@@ -123,13 +126,16 @@ class AuthProvider extends ChangeNotifier {
 
       if (_currentUser != null) {
         _successMessage = 'Account created successfully! Welcome aboard';
+        print('✅ Registration successful');
       }
       return _currentUser != null;
     } on TimeoutException {
       _errorMessage =
           'Connection timeout. Please check your internet connection and try again.';
+      print('⏱️ Registration timeout after 30 seconds');
       return false;
     } catch (e) {
+      print('❌ Registration exception: $e');
       _errorMessage = _getUserFriendlyErrorMessage(e);
       return false;
     } finally {
@@ -147,34 +153,19 @@ class AuthProvider extends ChangeNotifier {
     _successMessage = null;
     notifyListeners();
     try {
-      if (Platform.isLinux) {
-        if (_currentUser == null) {
-          throw Exception('No authenticated user.');
-        }
-        _currentUser = UserModel(
-          uid: _currentUser!.uid,
-          email: _currentUser!.email,
-          studentId: _currentUser!.studentId,
-          role: _currentUser!.role,
-          displayName: displayName,
-        );
-      } else {
-        // Check network connectivity first
-        final hasNetwork = await _checkNetworkConnectivity();
-        if (!hasNetwork) {
-          _errorMessage =
-              'No internet connection. Please check your network and try again.';
-          return false;
-        }
-
-        // Add timeout to the update operation
-        _currentUser = await _authService
-            .updateUserAccount(
-              displayName: displayName,
-              newPassword: newPassword,
-            )
-            .timeout(const Duration(seconds: 30));
+      // Check network connectivity first
+      final hasNetwork = await _checkNetworkConnectivity();
+      if (!hasNetwork) {
+        _errorMessage =
+            'No internet connection. Please check your network and try again.';
+        return false;
       }
+
+      // Add timeout to the update operation
+      _currentUser = await _authService
+          .updateUserAccount(displayName: displayName, newPassword: newPassword)
+          .timeout(const Duration(seconds: 30));
+
       _successMessage = 'Account updated successfully.';
       return true;
     } on TimeoutException {
@@ -213,8 +204,14 @@ class AuthProvider extends ChangeNotifier {
       return 'Network connection error. Please check your internet connection and try again.';
     }
 
-    // Handle Firebase Auth exceptions
+    if (error is UnsupportedError) {
+      return error.message ?? 'This operation is not supported.';
+    }
+
+    // Handle Supabase Auth exceptions
     final errorString = error.toString().toLowerCase();
+
+    print('📋 Error details for mapping: $errorString');
 
     if (errorString.contains('user-not-found') ||
         errorString.contains('no user record')) {
@@ -226,7 +223,8 @@ class AuthProvider extends ChangeNotifier {
       return 'Incorrect password. Please try again.';
     }
 
-    if (errorString.contains('email-already-in-use')) {
+    if (errorString.contains('email-already-in-use') ||
+        errorString.contains('user already exists')) {
       return 'An account with this student ID or email already exists.';
     }
 
@@ -234,20 +232,39 @@ class AuthProvider extends ChangeNotifier {
       return 'Password is too weak. Please use at least 6 characters.';
     }
 
-    if (errorString.contains('invalid-email')) {
+    if (errorString.contains('invalid-email') ||
+        errorString.contains('invalid email')) {
       return 'Invalid email format.';
+    }
+
+    if (errorString.contains('over_email_send_rate_limit') ||
+        errorString.contains('email rate limit exceeded')) {
+      return 'Too many verification emails have been sent. Please wait a few minutes and try again.';
     }
 
     if (errorString.contains('too-many-requests')) {
       return 'Too many failed attempts. Please try again later.';
     }
 
+    if (errorString.contains('new row violates row-level security policy') ||
+        errorString.contains('row-level security policy for table "users"') ||
+        errorString.contains('42501')) {
+      return 'Unable to create the user profile because the database row-level policy is blocking writes. Update your Supabase users table policy to allow inserts for the authenticated user.';
+    }
+
     if (errorString.contains('missing-profile')) {
       return 'Account setup incomplete. Please contact support.';
     }
 
-    // Default fallback
-    return 'Authentication failed. Please try again.';
+    if (errorString.contains('connection') || errorString.contains('timeout')) {
+      return 'Network error. Please check your connection and try again.';
+    }
+
+    // Default fallback - show raw error in debug
+    print('⚠️ Unhandled error type: $error');
+    return error is Exception
+        ? error.toString()
+        : 'Authentication failed. Please try again.';
   }
 
   bool _isNetworkError(dynamic error) {

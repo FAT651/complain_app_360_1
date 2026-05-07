@@ -17,6 +17,17 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
 
+  void _showFeedback(String message, {required bool isError}) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -342,7 +353,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 }
 
                 _addUserToFirestore(
-                  context,
                   email: emailController.text.trim(),
                   studentId: studentIdController.text.trim(),
                   displayName: displayNameController.text.trim(),
@@ -428,8 +438,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 }
 
                 _updateUserInFirestore(
-                  context,
-                  uid: user.uid,
+                  id: user.id,
                   email: emailController.text.trim(),
                   studentId: studentIdController.text.trim(),
                   displayName: displayNameController.text.trim(),
@@ -460,7 +469,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           ),
           ElevatedButton(
             onPressed: () {
-              _deleteUserFromFirestore(context, user.uid);
+              _deleteUserFromFirestore(user.id);
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -471,8 +480,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     );
   }
 
-  void _addUserToFirestore(
-    BuildContext context, {
+  void _addUserToFirestore({
     required String email,
     required String studentId,
     required String displayName,
@@ -488,29 +496,17 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         displayName: displayName.isNotEmpty ? displayName : null,
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${isAdmin ? 'Admin' : 'User'} added successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      _showFeedback(
+        '${isAdmin ? 'Admin' : 'User'} added successfully',
+        isError: false,
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error adding user: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showFeedback('Error adding user: $e', isError: true);
     }
   }
 
-  void _updateUserInFirestore(
-    BuildContext context, {
-    required String uid,
+  void _updateUserInFirestore({
+    required String id,
     required String email,
     required String studentId,
     required String displayName,
@@ -518,56 +514,28 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   }) async {
     try {
       final user = UserModel(
-        uid: uid,
+        id: id,
         email: email,
         studentId: studentId,
         role: role,
         displayName: displayName.isNotEmpty ? displayName : null,
       );
 
-      await _firestoreService.updateUser(uid, user);
+      await _firestoreService.updateUser(id, user);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User updated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      _showFeedback('User updated successfully', isError: false);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating user: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showFeedback('Error updating user: $e', isError: true);
     }
   }
 
-  void _deleteUserFromFirestore(BuildContext context, String uid) async {
+  void _deleteUserFromFirestore(String uid) async {
     try {
       await _firestoreService.deleteUser(uid);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User deleted successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      _showFeedback('User deleted successfully', isError: false);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error deleting user: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showFeedback('Error deleting user: $e', isError: true);
     }
   }
 
@@ -587,8 +555,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           ElevatedButton(
             onPressed: () {
               _updateUserRole(
-                context,
-                uid: user.uid,
+                id: user.id,
                 newRole: user.isAdmin ? 'student' : 'admin',
               );
               Navigator.pop(context);
@@ -600,31 +567,16 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     );
   }
 
-  void _updateUserRole(
-    BuildContext context, {
-    required String uid,
+  void _updateUserRole({
+    required String id,
     required String newRole,
   }) async {
     try {
-      await _firestoreService.updateUserRole(uid, newRole);
+      await _firestoreService.updateUserRole(id, newRole);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User role updated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      _showFeedback('User role updated successfully', isError: false);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating user role: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showFeedback('Error updating user role: $e', isError: true);
     }
   }
 }

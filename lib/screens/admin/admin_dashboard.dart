@@ -21,7 +21,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
   ComplaintStatus? _selectedStatus;
   String _searchStudentId = '';
-  String? _selectedCategory;
 
   @override
   void dispose() {
@@ -100,10 +99,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           builder: (context, snapshot) {
             final complaints = snapshot.data ?? [];
             final submitted = complaints
-                .where((c) => c.status == ComplaintStatus.submitted)
+                .where((c) => c.status == ComplaintStatus.pending)
                 .length;
             final inReview = complaints
-                .where((c) => c.status == ComplaintStatus.inReview)
+                .where((c) => c.status == ComplaintStatus.inProgress)
                 .length;
             final resolved = complaints
                 .where((c) => c.status == ComplaintStatus.resolved)
@@ -175,16 +174,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           stream: FirestoreService().allComplaints(),
           builder: (context, snapshot) {
             final complaints = snapshot.data ?? [];
-            final categories =
-                complaints
-                    .map((complaint) => complaint.category)
-                    .toSet()
-                    .toList()
-                  ..sort();
             final filteredComplaints = complaints.where((complaint) {
-              final matchesCategory =
-                  _selectedCategory == null ||
-                  complaint.category == _selectedCategory;
               final matchesStatus =
                   _selectedStatus == null ||
                   complaint.status == _selectedStatus;
@@ -193,7 +183,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   complaint.studentId.toLowerCase().contains(
                     _searchStudentId.toLowerCase(),
                   );
-              return matchesCategory && matchesStatus && matchesSearch;
+              return matchesStatus && matchesSearch;
             }).toList();
 
             return Column(
@@ -248,55 +238,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         ),
                       ),
                       const SizedBox(width: 12),
-
-                      // Category filter
-                      SizedBox(
-                        width: 100,
-                        child: DropdownButtonFormField<String?>(
-                          value: _selectedCategory,
-                          isDense: true,
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text(
-                                'All',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            ...categories.map(
-                              (category) => DropdownMenuItem<String?>(
-                                value: category,
-                                child: Text(
-                                  category.length > 8
-                                      ? '${category.substring(0, 8)}...'
-                                      : category,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            setState(() => _selectedCategory = value);
-                          },
-                          decoration: InputDecoration(
-                            labelText: 'Category',
-                            labelStyle: const TextStyle(fontSize: 11),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
 
                       // Status filter
                       SizedBox(
@@ -354,7 +295,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           onPressed: () {
                             setState(() {
                               _searchStudentId = '';
-                              _selectedCategory = null;
                               _selectedStatus = null;
                             });
                           },
@@ -738,7 +678,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    complaint.category,
+                    complaint.title,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -853,23 +793,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Color _getStatusColor(ComplaintStatus status) {
     switch (status) {
-      case ComplaintStatus.submitted:
+      case ComplaintStatus.pending:
         return Colors.orange;
-      case ComplaintStatus.inReview:
+      case ComplaintStatus.inProgress:
         return Colors.blue;
       case ComplaintStatus.resolved:
         return Colors.green;
+      case ComplaintStatus.closed:
+        return Colors.grey;
     }
   }
 
   IconData _getStatusIcon(ComplaintStatus status) {
     switch (status) {
-      case ComplaintStatus.submitted:
+      case ComplaintStatus.pending:
         return Icons.hourglass_empty;
-      case ComplaintStatus.inReview:
+      case ComplaintStatus.inProgress:
         return Icons.autorenew;
       case ComplaintStatus.resolved:
         return Icons.check_circle;
+      case ComplaintStatus.closed:
+        return Icons.block;
     }
   }
 

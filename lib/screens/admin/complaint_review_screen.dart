@@ -24,20 +24,42 @@ class ComplaintReviewScreen extends StatefulWidget {
 class _ComplaintReviewScreenState extends State<ComplaintReviewScreen> {
   final _replyController = TextEditingController();
   bool _isSaving = false;
+  Key _streamKey = UniqueKey();
 
   Future<void> _updateStatus(
     ComplaintModel complaint,
     ComplaintStatus newStatus,
   ) async {
+    final authProvider = context.read<AuthProvider>();
+    final currentUser = authProvider.currentUser;
+    debugPrint(
+      'Current user: ${currentUser?.email}, role: ${currentUser?.role}, id: ${currentUser?.id}',
+    );
+
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _isSaving = true);
     try {
-      await FirestoreService().updateComplaintStatus(complaint.id, newStatus);
+      debugPrint(
+        'Updating complaint ${complaint.id} status to ${newStatus.name}',
+      );
+      await FirestoreService().updateComplaintStatus(
+        complaint.id,
+        newStatus,
+        currentUser!.id,
+        currentUser.role,
+      );
       if (!mounted) return;
+      setState(() {
+        _streamKey = UniqueKey();
+      });
       messenger.showSnackBar(
         SnackBar(content: Text('Status updated to ${newStatus.name}.')),
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Failed to update status for complaint ${complaint.id}: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       String errorMessage = 'Failed to update status. Please try again.';
 
@@ -72,24 +94,41 @@ class _ComplaintReviewScreenState extends State<ComplaintReviewScreen> {
         message: message,
         createdAt: DateTime.now().toUtc(),
       );
+      debugPrint(
+        'Admin sending reply for complaint ${complaint.id} by user ${currentUser.studentId}',
+      );
 
       // Add reply first
-      await FirestoreService().addReply(complaint.id, reply);
+      await FirestoreService().addReply(
+        complaint.id,
+        reply,
+        currentUser.id,
+        currentUser.role,
+      );
 
-      // Then automatically mark as "In Review" if still submitted
-      if (complaint.status == ComplaintStatus.submitted) {
+      // Then automatically mark as "In Progress" if still pending
+      if (complaint.status == ComplaintStatus.pending) {
         await FirestoreService().updateComplaintStatus(
           complaint.id,
-          ComplaintStatus.inReview,
+          ComplaintStatus.inProgress,
+          currentUser.id,
+          currentUser.role,
         );
       }
 
       if (!mounted) return;
       _replyController.clear();
+      setState(() {
+        _streamKey = UniqueKey();
+      });
       messenger.showSnackBar(
         const SnackBar(content: Text('Reply sent and status updated.')),
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Failed to send admin reply for complaint ${complaint.id}: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       String errorMessage = 'Failed to send reply. Please try again.';
 
@@ -195,12 +234,14 @@ class _ComplaintReviewScreenState extends State<ComplaintReviewScreen> {
 
   Color _getStatusColor(ComplaintStatus status) {
     switch (status) {
-      case ComplaintStatus.submitted:
+      case ComplaintStatus.pending:
         return Colors.orange;
-      case ComplaintStatus.inReview:
+      case ComplaintStatus.inProgress:
         return Colors.purple;
       case ComplaintStatus.resolved:
         return Colors.green;
+      case ComplaintStatus.closed:
+        return Colors.grey;
     }
   }
 
@@ -209,6 +250,7 @@ class _ComplaintReviewScreenState extends State<ComplaintReviewScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Review Complaint')),
       body: StreamBuilder<ComplaintModel?>(
+        key: _streamKey,
         stream: FirestoreService().complaintStream(widget.complaintId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -245,7 +287,7 @@ class _ComplaintReviewScreenState extends State<ComplaintReviewScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                complaint.category,
+                                complaint.title,
                                 style: const TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.bold,
@@ -365,38 +407,6 @@ class _ComplaintReviewScreenState extends State<ComplaintReviewScreen> {
                           ],
                         ),
                       ),
-                    ] else if (complaint.attachmentUrl != null) ...[
-                      const SizedBox(height: 18),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.attachment,
-                              color: AppTheme.primary,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: InkWell(
-                                onTap: () =>
-                                    _openAttachment(complaint.attachmentUrl!),
-                                child: Text(
-                                  complaint.attachmentUrl!,
-                                  style: const TextStyle(
-                                    color: AppTheme.primary,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                     const SizedBox(height: 18),
                     Wrap(
@@ -408,11 +418,11 @@ class _ComplaintReviewScreenState extends State<ComplaintReviewScreen> {
                             minimumSize: const Size(134, 38),
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             backgroundColor:
-                                complaint.status == ComplaintStatus.inReview
+                                complaint.status == ComplaintStatus.inProgress
                                 ? Colors.purple
                                 : Colors.white,
                             foregroundColor:
-                                complaint.status == ComplaintStatus.inReview
+                                complaint.status == ComplaintStatus.inProgress
                                 ? Colors.white
                                 : Colors.purple,
                             elevation: 0,
@@ -426,13 +436,13 @@ class _ComplaintReviewScreenState extends State<ComplaintReviewScreen> {
                           ),
                           onPressed:
                               _isSaving ||
-                                  complaint.status == ComplaintStatus.inReview
+                                  complaint.status == ComplaintStatus.inProgress
                               ? null
                               : () => _updateStatus(
                                   complaint,
-                                  ComplaintStatus.inReview,
+                                  ComplaintStatus.inProgress,
                                 ),
-                          child: const Text('Mark In Review'),
+                          child: const Text('Mark In Progress'),
                         ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(

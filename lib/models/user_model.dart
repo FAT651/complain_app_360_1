@@ -1,16 +1,18 @@
 class UserModel {
-  final String uid;
+  final String id;
   final String email;
   final String studentId;
   final String role;
   final String? displayName;
+  final DateTime? createdAt;
 
   UserModel({
-    required this.uid,
+    required this.id,
     required this.email,
     required this.studentId,
     required this.role,
     this.displayName,
+    this.createdAt,
   });
 
   bool get isAdmin => role.toLowerCase() == 'admin';
@@ -26,19 +28,22 @@ class UserModel {
   Map<String, dynamic> toJson() {
     return {
       'email': email,
-      'studentId': studentId,
+      'student_id': studentId,
       'role': _normalizeRole(role),
-      'displayName': displayName,
+      'display_name': displayName,
     };
   }
 
-  factory UserModel.fromJson(String uid, Map<String, dynamic> json) {
+  factory UserModel.fromJson(String id, Map<String, dynamic> json) {
     return UserModel(
-      uid: uid,
+      id: id,
       email: json['email'] as String? ?? '',
-      studentId: json['studentId'] as String? ?? '',
+      studentId: json['student_id'] as String? ?? '',
       role: _normalizeRole(json['role'] as String?),
-      displayName: json['displayName'] as String?,
+      displayName: json['display_name'] as String?,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : null,
     );
   }
 }

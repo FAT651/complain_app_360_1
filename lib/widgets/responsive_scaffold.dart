@@ -55,6 +55,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
       // Desktop layout with sidebar
       return Scaffold(
         backgroundColor: widget.backgroundColor,
+        floatingActionButton: widget.floatingActionButton,
         body: Row(
           children: [
             // Sidebar

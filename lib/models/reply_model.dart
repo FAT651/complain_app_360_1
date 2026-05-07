@@ -24,15 +24,29 @@ class ReplyModel {
   }
 
   factory ReplyModel.fromJson(Map<String, dynamic> json) {
+    String valueOrEmpty(String camel, String snake) {
+      return json[camel] as String? ?? json[snake] as String? ?? '';
+    }
+
+    final createdAtValue = json['createdAt'] ?? json['created_at'];
+    DateTime createdAt;
+    if (createdAtValue is String) {
+      createdAt = DateTime.tryParse(createdAtValue) ?? DateTime.now().toUtc();
+    } else if (createdAtValue is DateTime) {
+      createdAt = createdAtValue.toUtc();
+    } else {
+      createdAt = DateTime.now().toUtc();
+    }
+
     return ReplyModel(
-      id: json['id'] as String? ?? '',
-      senderId: json['senderId'] as String? ?? '',
-      senderRole: json['senderRole'] as String? ?? 'student',
-      message: json['message'] as String? ?? '',
-      createdAt: DateTime.parse(
-        json['createdAt'] as String? ??
-            DateTime.now().toUtc().toIso8601String(),
-      ),
+      id: valueOrEmpty('id', 'id'),
+      senderId: valueOrEmpty('senderId', 'sender_id'),
+      senderRole:
+          valueOrEmpty('senderRole', 'sender_role').toLowerCase().isNotEmpty
+          ? valueOrEmpty('senderRole', 'sender_role')
+          : 'student',
+      message: valueOrEmpty('message', 'message'),
+      createdAt: createdAt,
     );
   }
 }

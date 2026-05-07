@@ -1,33 +1,23 @@
-import 'dart:io';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import 'firestore_service.dart';
 
 class AuthService {
-  late FirebaseAuth _auth;
+  final SupabaseClient _supabase = Supabase.instance.client;
   final FirestoreService _firestoreService = FirestoreService();
 
-  AuthService() {
-    // Firebase is not supported on Linux, so don't initialize it there
-    if (!Platform.isLinux) {
-      _auth = FirebaseAuth.instance;
-    }
-  }
-
   Future<UserModel?> restoreSignedInUser() async {
-    if (Platform.isLinux) {
-      return null; // No restoration on Linux (for testing)
-    }
-    final firebaseUser = _auth.currentUser;
-    if (firebaseUser == null) return null;
-    return _firestoreService.fetchUserByUid(firebaseUser.uid);
+    final supabaseUser = _supabase.auth.currentUser;
+    if (supabaseUser == null) return null;
+    return _firestoreService.fetchUserByUid(supabaseUser.id);
   }
 
   Future<String> _normalizeEmail(String input) async {
-    if (input.contains('@')) {
-      return input;
+    final trimmed = input.trim().toLowerCase();
+    if (trimmed.contains('@')) {
+      return trimmed;
     }
-    return '${input.trim()}@complaintapp.app';
+    return '$trimmed@complaintapp.app';
   }
 
   String _normalizeStudentId(String input) {
@@ -35,96 +25,66 @@ class AuthService {
   }
 
   Future<UserModel> signIn(String emailOrId, String password) async {
-    if (Platform.isLinux) {
-      // Return a test user for Linux development
-      return UserModel(
-        uid: 'linux-test-user',
-        email: 'test@complaintapp.app',
-        studentId: emailOrId.trim(),
-        role: emailOrId.trim().toLowerCase().contains('admin')
-            ? 'admin'
-            : 'student',
-        displayName: 'Test User',
-      );
-    }
+    final normalized = emailOrId.trim().toLowerCase();
+    final email = await _normalizeEmail(normalized);
 
-    final normalized = emailOrId.trim();
-    String email;
-    UserModel? user;
-
-    if (normalized.contains('@')) {
-      email = normalized;
-      user = await _firestoreService.fetchUserByEmail(email);
-    } else {
-      user = await _firestoreService.fetchUserByStudentId(
-        _normalizeStudentId(normalized),
-      );
-      if (user == null) {
-        throw FirebaseAuthException(
-          code: 'user-not-found',
-          message: 'Student ID not found',
-        );
-      }
-      email = user.email;
-    }
-
-    final result = await _auth.signInWithEmailAndPassword(
+    final response = await _supabase.auth.signInWithPassword(
       email: email,
       password: password,
     );
-    final currentUser = result.user;
+
+    final currentUser = response.user;
     if (currentUser == null) {
-      throw FirebaseAuthException(
-        code: 'user-not-found',
-        message: 'Unable to sign in',
-      );
+      throw Exception('user-not-found');
     }
 
-    final profile = await _firestoreService.fetchUserByUid(currentUser.uid);
+    final profile = await _firestoreService.fetchUserByUid(currentUser.id);
     if (profile == null) {
-      throw FirebaseAuthException(
-        code: 'missing-profile',
-        message: 'User profile not found',
-      );
+      throw Exception('missing-profile');
     }
     return profile;
   }
 
   Future<UserModel> register(String emailOrId, String password) async {
-    if (Platform.isLinux) {
-      throw UnsupportedError(
-        'User registration is not supported on Linux. This is a desktop testing build.',
+    try {
+      final normalized = emailOrId.trim().toLowerCase();
+      final email = await _normalizeEmail(normalized);
+      final studentId = normalized.contains('@')
+          ? normalized.split('@').first
+          : _normalizeStudentId(normalized);
+
+      print('🔐 Registration attempt: email=$email, studentId=$studentId');
+
+      final signUpResponse = await _supabase.auth.signUp(
+        email: email,
+        password: password,
       );
-    }
 
-    final normalized = emailOrId.trim();
-    final email = await _normalizeEmail(normalized);
-    final studentId = normalized.contains('@')
-        ? normalized.split('@').first
-        : _normalizeStudentId(normalized);
+      final authUser = signUpResponse.user;
+      if (authUser == null) {
+        print('❌ Auth user is null after signup');
+        throw Exception('account-creation-failed');
+      }
 
-    final result = await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-    final currentUser = result.user;
-    if (currentUser == null) {
-      throw FirebaseAuthException(
-        code: 'account-creation-failed',
-        message: 'Unable to create account',
+      print('✅ Supabase auth signup successful: userId=${authUser.id}');
+
+      final userModel = UserModel(
+        id: authUser.id,
+        email: email,
+        studentId: studentId,
+        role: 'student',
+        displayName: studentId,
       );
+
+      print('📝 Creating user profile in database...');
+      await _firestoreService.createUser(userModel);
+      print('✅ User profile created successfully');
+      return userModel;
+    } catch (e, stackTrace) {
+      print('❌ Registration error: $e');
+      print('Stack trace: $stackTrace');
+      rethrow;
     }
-
-    final userModel = UserModel(
-      uid: currentUser.uid,
-      email: email,
-      studentId: studentId,
-      role: 'student',
-      displayName: studentId,
-    );
-
-    await _firestoreService.createUser(userModel);
-    return userModel;
   }
 
   Future<UserModel> createUserAccount({
@@ -134,26 +94,18 @@ class AuthService {
     required String role,
     String? displayName,
   }) async {
-    if (Platform.isLinux) {
-      throw UnsupportedError(
-        'User account creation is not supported on Linux. This is a desktop testing build.',
-      );
-    }
-
-    final result = await _auth.createUserWithEmailAndPassword(
+    final signUpResponse = await _supabase.auth.signUp(
       email: email,
       password: password,
     );
-    final currentUser = result.user;
-    if (currentUser == null) {
-      throw FirebaseAuthException(
-        code: 'account-creation-failed',
-        message: 'Unable to create account',
-      );
+
+    final authUser = signUpResponse.user;
+    if (authUser == null) {
+      throw Exception('account-creation-failed');
     }
 
     final userModel = UserModel(
-      uid: currentUser.uid,
+      id: authUser.id,
       email: email,
       studentId: studentId.trim().toLowerCase(),
       role: role,
@@ -168,48 +120,27 @@ class AuthService {
     String? displayName,
     String? newPassword,
   }) async {
-    if (Platform.isLinux) {
-      throw UnsupportedError(
-        'Account updates are not supported on Linux. This is a desktop testing build.',
-      );
-    }
-
-    final currentUser = _auth.currentUser;
+    final currentUser = _supabase.auth.currentUser;
     if (currentUser == null) {
-      throw FirebaseAuthException(
-        code: 'user-not-found',
-        message: 'No authenticated user found.',
-      );
+      throw Exception('user-not-found');
     }
 
-    // Update password if provided
     if (newPassword != null && newPassword.isNotEmpty) {
-      try {
-        await currentUser.updatePassword(newPassword);
-      } catch (e) {
-        if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
-          throw FirebaseAuthException(
-            code: 'requires-recent-login',
-            message:
-                'For security reasons, please sign out and sign back in before changing your password.',
-          );
-        }
-        rethrow;
+      final updateResponse = await _supabase.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+      if (updateResponse.user == null) {
+        throw Exception('password-update-failed');
       }
     }
 
-    // Fetch current profile
-    final profile = await _firestoreService.fetchUserByUid(currentUser.uid);
+    final profile = await _firestoreService.fetchUserByUid(currentUser.id);
     if (profile == null) {
-      throw FirebaseAuthException(
-        code: 'missing-profile',
-        message: 'User profile not found',
-      );
+      throw Exception('missing-profile');
     }
 
-    // Create updated profile
     final updatedProfile = UserModel(
-      uid: profile.uid,
+      id: profile.id,
       email: profile.email,
       studentId: profile.studentId,
       role: profile.role,
@@ -218,20 +149,17 @@ class AuthService {
           : profile.displayName,
     );
 
-    // Update Firestore if display name changed or password was updated
     if ((displayName != null &&
             displayName.isNotEmpty &&
             displayName != profile.displayName) ||
         (newPassword != null && newPassword.isNotEmpty)) {
-      await _firestoreService.updateUser(currentUser.uid, updatedProfile);
+      await _firestoreService.updateUser(currentUser.id, updatedProfile);
     }
 
     return updatedProfile;
   }
 
   Future<void> signOut() async {
-    if (!Platform.isLinux) {
-      await _auth.signOut();
-    }
+    await _supabase.auth.signOut();
   }
 }

@@ -20,10 +20,11 @@ class ComplaintFormScreen extends StatefulWidget {
 }
 
 class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
+  final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   String _selectedCategory = complaintCategories.first;
-  List<String> _attachmentNames = [];
-  List<Uint8List> _attachmentBytes = [];
+  final List<String> _attachmentNames = [];
+  final List<Uint8List> _attachmentBytes = [];
   bool _isSubmitting = false;
 
   Future<void> _pickAttachment() async {
@@ -86,7 +87,14 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
     final authProvider = context.read<AuthProvider>();
     final currentUser = authProvider.currentUser;
     if (currentUser == null) return;
+    final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add a complaint title.')),
+      );
+      return;
+    }
     if (description.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please add complaint details.')),
@@ -97,10 +105,24 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
     setState(() => _isSubmitting = true);
     try {
       final complaintId = const Uuid().v4();
-      List<String> attachmentUrls = [];
-      String? attachmentUrl;
+      final complaint = ComplaintModel(
+        id: complaintId,
+        studentId: currentUser.studentId,
+        title: title,
+        description: description,
+        attachmentUrls: [],
+        status: ComplaintStatus.pending,
+        createdAt: DateTime.now().toUtc(),
+        replies: [],
+      );
 
-      // Upload all selected files
+      // Create complaint record first to avoid orphaned files if the DB insert fails.
+      await FirestoreService().createComplaint(complaint);
+
+      List<String> attachmentUrls = [];
+      bool attachmentUploadFailed = false;
+      String? attachmentErrorMessage;
+
       if (_attachmentBytes.isNotEmpty) {
         for (int i = 0; i < _attachmentBytes.length; i++) {
           try {
@@ -111,50 +133,55 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
             );
             attachmentUrls.add(url);
           } catch (e) {
-            print('Error uploading file ${_attachmentNames[i]}: $e');
-            rethrow;
+            attachmentUploadFailed = true;
+            attachmentErrorMessage = e.toString();
+            debugPrint('Error uploading file ${_attachmentNames[i]}: $e');
+            // Continue trying the remaining files, but keep the complaint record.
           }
         }
-        // Keep the first URL for backward compatibility
-        attachmentUrl = attachmentUrls.isNotEmpty ? attachmentUrls.first : null;
+
+        if (attachmentUrls.isNotEmpty) {
+          await FirestoreService().addAttachmentsToComplaint(
+            complaintId,
+            attachmentUrls,
+          );
+        }
       }
 
-      final complaint = ComplaintModel(
-        id: complaintId,
-        studentId: currentUser.studentId,
-        studentEmail: currentUser.email,
-        category: _selectedCategory,
-        description: description,
-        attachmentUrl: attachmentUrl,
-        attachmentUrls: attachmentUrls,
-        createdAt: DateTime.now().toUtc(),
-        replies: [],
-      );
-
-      await FirestoreService().createComplaint(complaint);
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
-      final navigator = Navigator.of(context);
-      navigator.pop();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Complaint submitted successfully.')),
+        SnackBar(
+          content: Text(
+            attachmentUploadFailed
+                ? 'Complaint submitted, but some attachments failed to upload. ${attachmentErrorMessage ?? ''}'
+                : 'Complaint submitted successfully.',
+          ),
+        ),
       );
-    } catch (error) {
+      Navigator.of(context).pop(true);
+    } catch (error, stackTrace) {
+      debugPrint('Complaint submission failed: $error');
+      debugPrint('$stackTrace');
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       String errorMessage = 'Failed to submit complaint. Please try again.';
 
-      // Provide more specific error messages
       final errorString = error.toString().toLowerCase();
-      if (errorString.contains('network') ||
+      if (errorString.contains('row-level security') ||
+          errorString.contains('permission denied') ||
+          errorString.contains('42501') ||
+          errorString.contains('policy')) {
+        errorMessage =
+            'Saving the complaint failed due to database permissions. Update your Supabase complaint table policy.';
+      } else if (errorString.contains('network') ||
           errorString.contains('unavailable')) {
         errorMessage = 'Network error. Please check your internet connection.';
-      } else if (errorString.contains('permission') ||
-          errorString.contains('denied')) {
-        errorMessage = 'Permission error. Please try again.';
       } else if (errorString.contains('storage')) {
         errorMessage =
             'File upload failed. Please check your file and try again.';
+      } else if (errorString.contains('failed to save complaint')) {
+        errorMessage = 'Failed to save complaint. ${error.toString()}';
       }
 
       messenger.showSnackBar(SnackBar(content: Text(errorMessage)));
@@ -204,6 +231,43 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
           ),
           const SizedBox(height: 20),
 
+          // Title card
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Complaint Title',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _titleController,
+                  decoration: AppTheme.formInputDecoration(
+                    label: 'Enter a short title for your complaint',
+                    icon: Icons.title,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
           // Category card
           Container(
             decoration: BoxDecoration(
@@ -240,8 +304,9 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                       )
                       .toList(),
                   onChanged: (value) {
-                    if (value != null)
+                    if (value != null) {
                       setState(() => _selectedCategory = value);
+                    }
                   },
                   decoration: AppTheme.formInputDecoration(
                     label: 'Choose category',

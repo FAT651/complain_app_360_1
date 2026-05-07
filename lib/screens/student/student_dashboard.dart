@@ -71,12 +71,16 @@ class _StudentDashboardState extends State<StudentDashboard> {
       floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton.extended(
               onPressed: () {
-                Navigator.push(
+                Navigator.push<bool>(
                   context,
                   MaterialPageRoute(
                     builder: (_) => const ComplaintFormScreen(),
                   ),
-                );
+                ).then((result) {
+                  if (result == true && mounted) {
+                    setState(() {});
+                  }
+                });
               },
               label: const Text('New Complaint'),
               icon: const Icon(Icons.add),
@@ -134,10 +138,10 @@ class _StudentDashboardState extends State<StudentDashboard> {
             }
             final complaints = snapshot.data ?? [];
             final submitted = complaints
-                .where((c) => c.status == ComplaintStatus.submitted)
+                .where((c) => c.status == ComplaintStatus.pending)
                 .length;
             final inReview = complaints
-                .where((c) => c.status == ComplaintStatus.inReview)
+                .where((c) => c.status == ComplaintStatus.inProgress)
                 .length;
             final resolved = complaints
                 .where((c) => c.status == ComplaintStatus.resolved)
@@ -287,7 +291,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     }
 
     return StreamBuilder<List<NotificationModel>>(
-      stream: firestoreService.userNotifications(authProvider.currentUser!.uid),
+      stream: firestoreService.userNotifications(authProvider.currentUser!.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -697,13 +701,17 @@ class _StudentDashboardState extends State<StudentDashboard> {
         child: Material(
           child: InkWell(
             onTap: () {
-              Navigator.push(
+              Navigator.push<bool>(
                 context,
                 MaterialPageRoute(
                   builder: (_) =>
                       ComplaintDetailScreen(complaintId: complaint.id),
                 ),
-              );
+              ).then((result) {
+                if (result == true && mounted) {
+                  setState(() {});
+                }
+              });
             },
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -717,7 +725,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              complaint.category,
+                              complaint.title,
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -849,23 +857,27 @@ class _StudentDashboardState extends State<StudentDashboard> {
 
   Color _getStatusColor(ComplaintStatus status) {
     switch (status) {
-      case ComplaintStatus.submitted:
+      case ComplaintStatus.pending:
         return Colors.orange;
-      case ComplaintStatus.inReview:
+      case ComplaintStatus.inProgress:
         return Colors.blue;
       case ComplaintStatus.resolved:
         return Colors.green;
+      case ComplaintStatus.closed:
+        return Colors.grey;
     }
   }
 
   IconData _getStatusIcon(ComplaintStatus status) {
     switch (status) {
-      case ComplaintStatus.submitted:
+      case ComplaintStatus.pending:
         return Icons.hourglass_empty;
-      case ComplaintStatus.inReview:
+      case ComplaintStatus.inProgress:
         return Icons.autorenew;
       case ComplaintStatus.resolved:
         return Icons.check_circle;
+      case ComplaintStatus.closed:
+        return Icons.block;
     }
   }
 

@@ -1,15 +1,28 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'reply_model.dart';
 
-enum ComplaintStatus { submitted, inReview, resolved }
+enum ComplaintStatus { pending, inProgress, resolved, closed }
+
+extension ComplaintStatusExtension on ComplaintStatus {
+  /// Convert enum to database format (snake_case)
+  String toDatabaseString() {
+    switch (this) {
+      case ComplaintStatus.pending:
+        return 'pending';
+      case ComplaintStatus.inProgress:
+        return 'in_progress';
+      case ComplaintStatus.resolved:
+        return 'resolved';
+      case ComplaintStatus.closed:
+        return 'closed';
+    }
+  }
+}
 
 class ComplaintModel {
   final String id;
   final String studentId;
-  final String studentEmail;
-  final String category;
+  final String title;
   final String description;
-  final String? attachmentUrl;
   final List<String> attachmentUrls;
   final ComplaintStatus status;
   final DateTime createdAt;
@@ -18,53 +31,79 @@ class ComplaintModel {
   ComplaintModel({
     required this.id,
     required this.studentId,
-    required this.studentEmail,
-    required this.category,
+    required this.title,
     required this.description,
-    this.attachmentUrl,
     this.attachmentUrls = const [],
-    this.status = ComplaintStatus.submitted,
+    this.status = ComplaintStatus.pending,
     required this.createdAt,
     this.replies = const [],
   });
 
   Map<String, dynamic> toJson() {
     return {
-      'studentId': studentId,
-      'studentEmail': studentEmail,
-      'category': category,
+      'student_id': studentId,
+      'title': title,
       'description': description,
-      'attachmentUrl': attachmentUrl,
-      'attachmentUrls': attachmentUrls,
-      'status': status.name,
-      'createdAt': createdAt.toUtc().toIso8601String(),
+      'attachment_urls': attachmentUrls,
+      'status': status.toDatabaseString(),
+      'created_at': createdAt.toUtc().toIso8601String(),
       'replies': replies.map((reply) => reply.toJson()).toList(),
     };
   }
 
-  factory ComplaintModel.fromDocument(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory ComplaintModel.fromJson(String id, Map<String, dynamic> json) {
+    final rawReplies = json['replies'] as List<dynamic>?;
     final replyList =
-        (data['replies'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+        rawReplies
+            ?.map(
+              (item) =>
+                  ReplyModel.fromJson(Map<String, dynamic>.from(item as Map)),
+            )
+            .toList() ??
+        [];
     final attachmentUrlsList =
-        (data['attachmentUrls'] as List<dynamic>?)?.cast<String>() ?? [];
+        (json['attachment_urls'] as List<dynamic>?)
+            ?.map((item) => item as String)
+            .toList() ??
+        [];
+
+    // Convert status name to enum and support common variants.
+    ComplaintStatus statusEnum = ComplaintStatus.pending;
+    final statusStr = (json['status'] as String?)?.trim().toLowerCase();
+    if (statusStr != null && statusStr.isNotEmpty) {
+      switch (statusStr) {
+        case 'pending':
+          statusEnum = ComplaintStatus.pending;
+          break;
+        case 'inprogress':
+        case 'in_progress':
+        case 'in progress':
+        case 'review':
+        case 'inreview':
+          statusEnum = ComplaintStatus.inProgress;
+          break;
+        case 'resolved':
+          statusEnum = ComplaintStatus.resolved;
+          break;
+        case 'closed':
+          statusEnum = ComplaintStatus.closed;
+          break;
+        default:
+          statusEnum = ComplaintStatus.pending;
+      }
+    }
+
     return ComplaintModel(
-      id: doc.id,
-      studentId: data['studentId'] as String? ?? '',
-      studentEmail: data['studentEmail'] as String? ?? '',
-      category: data['category'] as String? ?? '',
-      description: data['description'] as String? ?? '',
-      attachmentUrl: data['attachmentUrl'] as String?,
+      id: id,
+      studentId: json['student_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
       attachmentUrls: attachmentUrlsList,
-      status: ComplaintStatus.values.firstWhere(
-        (status) => status.name == (data['status'] as String? ?? 'submitted'),
-        orElse: () => ComplaintStatus.submitted,
-      ),
-      createdAt: DateTime.parse(
-        data['createdAt'] as String? ??
-            DateTime.now().toUtc().toIso8601String(),
-      ),
-      replies: replyList.map((reply) => ReplyModel.fromJson(reply)).toList(),
+      status: statusEnum,
+      createdAt:
+          DateTime.tryParse(json['created_at'] as String? ?? '') ??
+          DateTime.now().toUtc(),
+      replies: replyList,
     );
   }
 }
